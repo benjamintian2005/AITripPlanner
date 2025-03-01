@@ -1,509 +1,342 @@
+// app/auth.tsx
 import React, { useState } from 'react';
 import {
   StyleSheet,
   View,
   Text,
-  ScrollView,
-  TouchableOpacity,
   TextInput,
-  Platform,
+  TouchableOpacity,
+  SafeAreaView,
   KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
   Alert,
 } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
-import { CheckBox } from 'react-native-elements';
-import * as Location from 'expo-location';
+import { Link, router } from 'expo-router';
 
+// Type definitions
 interface UserData {
-  gender: string;
-  age: string;
-  ethnicity: string;
-  budget: string;
-  groupType: string;
-  groupSize: string;
-  childFriendly: boolean;
-  duration: string;
-  location: string;
-  coordinates: {
-    latitude: number | null;
-    longitude: number | null;
+  token: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
   };
 }
 
-// Sample locations for the picker
-const popularLocations = [
-  { label: 'Select a location', value: '' },
-  { label: 'New York, USA', value: 'new-york' },
-  { label: 'Paris, France', value: 'paris' },
-  { label: 'Tokyo, Japan', value: 'tokyo' },
-  { label: 'London, UK', value: 'london' },
-  { label: 'Rome, Italy', value: 'rome' },
-  { label: 'Sydney, Australia', value: 'sydney' },
-  { label: 'Barcelona, Spain', value: 'barcelona' },
-  { label: 'Dubai, UAE', value: 'dubai' },
-  { label: 'Singapore', value: 'singapore' },
-  { label: 'Custom Location', value: 'custom' },
-];
+// API services
+const API_URL = 'https://your-api-endpoint.com';
 
-const InitialSurveyScreen = ({ navigation }: { navigation: any }) => {
-  const [userData, setUserData] = useState<UserData>({
-    gender: '',
-    age: '',
-    ethnicity: '',
-    budget: '',
-    groupType: '',
-    groupSize: '',
-    childFriendly: false,
-    duration: '',
-    location: '',
-    coordinates: {
-      latitude: null,
-      longitude: null,
-    },
-  });
-
-  const [loading, setLoading] = useState(false);
-  const [currentSection, setCurrentSection] = useState<'personal' | 'trip'>('personal');
-  const [customLocationMode, setCustomLocationMode] = useState(false);
-  const [selectedLocationValue, setSelectedLocationValue] = useState('');
-
-  const ethnicityOptions = [
-    'African', 'Asian', 'Caucasian', 'Hispanic/Latino', 
-    'Middle Eastern', 'Native American', 'Pacific Islander', 'Other', 'Prefer not to say'
-  ];
-
-  const getCurrentLocation = async () => {
-    setLoading(true);
+const authService = {
+  login: async (email: string, password: string): Promise<UserData> => {
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      
-      if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Please allow location access to continue');
-        setLoading(false);
-        return;
-      }
-
-      const location = await Location.getCurrentPositionAsync({});
-      const { latitude, longitude } = location.coords;
-      
-      // Get address from coordinates
-      const addressResponse = await Location.reverseGeocodeAsync({
-        latitude,
-        longitude
-      });
-
-      let address = 'Current Location';
-      if (addressResponse.length > 0) {
-        const { city, region, country } = addressResponse[0];
-        address = [city, region, country].filter(Boolean).join(', ');
-      }
-
-      setUserData({
-        ...userData,
-        location: address,
-        coordinates: {
-          latitude,
-          longitude,
+      const response = await fetch(`${API_URL}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ email, password }),
       });
-      setSelectedLocationValue('custom');
-      setCustomLocationMode(true);
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Login failed');
+      }
+      
+      return data;
     } catch (error) {
-      Alert.alert('Error', 'Failed to get location');
-      console.error(error);
-    } finally {
-      setLoading(false);
+      console.error('Login error:', error);
+      throw error;
     }
-  };
-
-  const handleLocationChange = (value: string) => {
-    setSelectedLocationValue(value);
-    
-    if (value === 'custom') {
-      setCustomLocationMode(true);
-      // Clear existing location if switching to custom
-      setUserData({
-        ...userData,
-        location: '',
-        coordinates: {
-          latitude: null,
-          longitude: null,
+  },
+  
+  register: async (name: string, email: string, password: string): Promise<UserData> => {
+    try {
+      const response = await fetch(`${API_URL}/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ name, email, password }),
       });
-    } else if (value !== '') {
-      setCustomLocationMode(false);
-      // Find the label for the selected location
-      const selectedLocation = popularLocations.find(loc => loc.value === value);
-      if (selectedLocation) {
-        setUserData({
-          ...userData,
-          location: selectedLocation.label,
-          coordinates: {
-            latitude: null, // In a real app, you would have predefined coordinates
-            longitude: null,
-          },
-        });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Registration failed');
       }
+      
+      return data;
+    } catch (error) {
+      console.error('Registration error:', error);
+      throw error;
     }
+  },
+};
+
+export default function AuthScreen() {
+  const [isLogin, setIsLogin] = useState<boolean>(true);
+  const [name, setName] = useState<string>('');
+  const [email, setEmail] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+
+  const toggleAuthMode = (): void => {
+    setIsLogin(!isLogin);
+    // Clear fields when switching between login and signup
+    setName('');
+    setEmail('');
+    setPassword('');
   };
 
-  const validatePersonalInfo = () => {
-    if (!userData.gender || !userData.age) {
-      Alert.alert('Missing Information', 'Please fill out gender and age');
+  const validateForm = (): boolean => {
+    if (!email.trim()) {
+      Alert.alert('Validation Error', 'Email is required');
       return false;
     }
+    
+    if (!password.trim()) {
+      Alert.alert('Validation Error', 'Password is required');
+      return false;
+    }
+    
+    if (!isLogin && !name.trim()) {
+      Alert.alert('Validation Error', 'Name is required');
+      return false;
+    }
+    
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      Alert.alert('Validation Error', 'Please enter a valid email address');
+      return false;
+    }
+    
+    // Password strength validation
+    if (password.length < 6) {
+      Alert.alert('Validation Error', 'Password must be at least 6 characters');
+      return false;
+    }
+    
     return true;
   };
 
-  const validateTripInfo = () => {
-    if (!userData.budget || !userData.groupType || !userData.groupSize || !userData.duration || !userData.location) {
-      Alert.alert('Missing Information', 'Please fill out all required trip details');
-      return false;
+  const handleSubmit = async (): Promise<void> => {
+    console.log("clicked");
+    router.replace('/trip');
+
+    if (!validateForm()) return;
+    
+    setIsLoading(true);
+    
+    try {
+      if (isLogin) {
+        // Handle login
+        const userData = await authService.login(email, password);
+        // Store user data or token in your app's state management (e.g., AsyncStorage)
+        console.log('Login successful:', userData);
+        // Navigate to main app screen
+        router.replace('/trip');
+      } else {
+        // Handle registration
+        const userData = await authService.register(name, email, password);
+        console.log('Registration successful:', userData);
+        // Either automatically log the user in or switch to login mode
+        setIsLogin(true);
+        Alert.alert('Success', 'Registration successful! Please log in.');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Authentication failed');
+    } finally {
+      setIsLoading(false);
     }
-    return true;
   };
-
-  const moveToTripSection = () => {
-    if (validatePersonalInfo()) {
-      setCurrentSection('trip');
-    }
-  };
-
-  const submitSurvey = () => {
-    if (validateTripInfo()) {
-      // In a real app, you would send this data to your backend
-      console.log('Survey data:', userData);
-      
-      // Navigate to the next screen (recommendations/events)
-      navigation.navigate('EventRecommendations', { userData });
-    }
-  };
-
-  // Render Personal Information Section
-  const renderPersonalSection = () => (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>About You</Text>
-      
-      <Text style={styles.label}>Gender</Text>
-      <View style={styles.pickerContainer}>
-        <Picker
-          selectedValue={userData.gender}
-          onValueChange={(value) => setUserData({ ...userData, gender: value })}
-          style={styles.picker}
-        >
-          <Picker.Item label="Select Gender" value="" />
-          <Picker.Item label="Male" value="male" />
-          <Picker.Item label="Female" value="female" />
-          <Picker.Item label="Non-binary" value="non-binary" />
-          <Picker.Item label="Prefer not to say" value="not-specified" />
-        </Picker>
-      </View>
-
-      <Text style={styles.label}>Age</Text>
-      <View style={styles.pickerContainer}>
-        <Picker
-          selectedValue={userData.age}
-          onValueChange={(value) => setUserData({ ...userData, age: value })}
-          style={styles.picker}
-        >
-          <Picker.Item label="Select Age Range" value="" />
-          <Picker.Item label="Under 18" value="under-18" />
-          <Picker.Item label="18-24" value="18-24" />
-          <Picker.Item label="25-34" value="25-34" />
-          <Picker.Item label="35-44" value="35-44" />
-          <Picker.Item label="45-54" value="45-54" />
-          <Picker.Item label="55-64" value="55-64" />
-          <Picker.Item label="65+" value="65+" />
-        </Picker>
-      </View>
-
-      <Text style={styles.label}>Ethnicity</Text>
-      <View style={styles.pickerContainer}>
-        <Picker
-          selectedValue={userData.ethnicity}
-          onValueChange={(value) => setUserData({ ...userData, ethnicity: value })}
-          style={styles.picker}
-        >
-          <Picker.Item label="Select Ethnicity" value="" />
-          {ethnicityOptions.map((option, index) => (
-            <Picker.Item key={index} label={option} value={option.toLowerCase()} />
-          ))}
-        </Picker>
-      </View>
-
-      <TouchableOpacity style={styles.button} onPress={moveToTripSection}>
-        <Text style={styles.buttonText}>Next: Trip Details</Text>
-      </TouchableOpacity>
-    </View>
-  );
-
-  // Render Trip Information Section
-  const renderTripSection = () => (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>Trip Details</Text>
-      
-      <Text style={styles.label}>Budget</Text>
-      <View style={styles.pickerContainer}>
-        <Picker
-          selectedValue={userData.budget}
-          onValueChange={(value) => setUserData({ ...userData, budget: value })}
-          style={styles.picker}
-        >
-          <Picker.Item label="Select Budget" value="" />
-          <Picker.Item label="Budget-friendly" value="budget" />
-          <Picker.Item label="Mid-range" value="mid-range" />
-          <Picker.Item label="Luxury" value="luxury" />
-        </Picker>
-      </View>
-
-      <Text style={styles.label}>Type of Group</Text>
-      <View style={styles.pickerContainer}>
-        <Picker
-          selectedValue={userData.groupType}
-          onValueChange={(value) => setUserData({ ...userData, groupType: value })}
-          style={styles.picker}
-        >
-          <Picker.Item label="Select Group Type" value="" />
-          <Picker.Item label="Individual" value="individual" />
-          <Picker.Item label="Couple" value="couple" />
-          <Picker.Item label="Friends" value="friends" />
-          <Picker.Item label="Family" value="family" />
-        </Picker>
-      </View>
-
-      <Text style={styles.label}>Group Size</Text>
-      <View style={styles.pickerContainer}>
-        <Picker
-          selectedValue={userData.groupSize}
-          onValueChange={(value) => setUserData({ ...userData, groupSize: value })}
-          style={styles.picker}
-        >
-          <Picker.Item label="Select Group Size" value="" />
-          <Picker.Item label="1 person" value="1" />
-          <Picker.Item label="2 people" value="2" />
-          <Picker.Item label="3-4 people" value="3-4" />
-          <Picker.Item label="5-8 people" value="5-8" />
-          <Picker.Item label="9+ people" value="9+" />
-        </Picker>
-      </View>
-
-      <View style={styles.checkboxRow}>
-        <CheckBox
-          title="Child-friendly options needed"
-          checked={userData.childFriendly}
-          onPress={() => setUserData({ ...userData, childFriendly: !userData.childFriendly })}
-          containerStyle={styles.checkboxContainer}
-          textStyle={styles.checkboxText}
-        />
-      </View>
-
-      <Text style={styles.label}>Trip Duration (days)</Text>
-      <TextInput
-        style={styles.textInput}
-        placeholder="Number of days"
-        value={userData.duration}
-        onChangeText={(value) => setUserData({ ...userData, duration: value })}
-        keyboardType="numeric"
-      />
-
-      <Text style={styles.label}>Trip Location</Text>
-      <View style={styles.pickerContainer}>
-        <Picker
-          selectedValue={selectedLocationValue}
-          onValueChange={handleLocationChange}
-          style={styles.picker}
-        >
-          {popularLocations.map((location) => (
-            <Picker.Item 
-              key={location.value} 
-              label={location.label} 
-              value={location.value} 
-            />
-          ))}
-        </Picker>
-      </View>
-
-      {customLocationMode && (
-        <View style={styles.locationInputContainer}>
-          <TextInput
-            style={[styles.textInput, styles.locationInput]}
-            placeholder="Enter destination"
-            value={userData.location}
-            onChangeText={(value) => setUserData({ ...userData, location: value })}
-          />
-          <TouchableOpacity 
-            style={styles.locationButton}
-            onPress={getCurrentLocation}
-            disabled={loading}
-          >
-            <Text style={styles.locationButtonText}>
-              {loading ? "Loading..." : "Current"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      <View style={styles.navigationButtons}>
-        <TouchableOpacity 
-          style={[styles.button, styles.backButton]} 
-          onPress={() => setCurrentSection('personal')}
-        >
-          <Text style={styles.buttonText}>Back</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.button} onPress={submitSurvey}>
-          <Text style={styles.buttonText}>Find Events</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
-    >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Welcome to TripAdapt</Text>
-          <Text style={styles.subtitle}>
-            Tell us about yourself so we can recommend personalized experiences
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardAvoidView}
+      >
+        <View style={styles.innerContainer}>
+          <Text style={styles.headerText}>
+            {isLogin ? 'Welcome Back' : 'Create Account'}
           </Text>
-        </View>
+          <Text style={styles.subHeaderText}>
+            {isLogin ? 'Sign in to continue' : 'Sign up to get started'}
+          </Text>
 
-        {currentSection === 'personal' ? renderPersonalSection() : renderTripSection()}
-      </ScrollView>
-    </KeyboardAvoidingView>
+          {!isLogin && (
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Name</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter your full name"
+                value={name}
+                onChangeText={setName}
+                autoCapitalize="words"
+              />
+            </View>
+          )}
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Email</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter your email"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Password</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter your password"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+            />
+          </View>
+
+          {isLogin && (
+            <TouchableOpacity style={styles.forgotPassword}>
+              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            style={styles.button}
+            onPress={handleSubmit}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>
+                {isLogin ? 'Sign In' : 'Sign Up'}
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>
+              {isLogin ? "Don't have an account?" : 'Already have an account?'}
+            </Text>
+            <TouchableOpacity onPress={toggleAuthMode}>
+              <Text style={styles.footerLink}>
+                {isLogin ? 'Sign Up' : 'Sign In'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          
+          {/* Example of using Link from expo-router */}
+          <View style={styles.expoRouterLinks}>
+            <Text style={styles.linksHeader}>Quick Links:</Text>
+            
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#f5f5f5',
   },
-  scrollContainer: {
-    padding: 20,
+  keyboardAvoidView: {
+    flex: 1,
   },
-  header: {
-    marginBottom: 24,
+  innerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
   },
-  title: {
+  headerText: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#2c3e50',
-    textAlign: 'center',
+    color: '#333',
     marginBottom: 8,
   },
-  subtitle: {
+  subHeaderText: {
     fontSize: 16,
-    color: '#7f8c8d',
-    textAlign: 'center',
-    marginBottom: 4,
+    color: '#666',
+    marginBottom: 40,
   },
-  section: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 20,
+  inputContainer: {
     marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  sectionTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#34495e',
-    marginBottom: 16,
   },
   label: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '500',
-    color: '#2c3e50',
-    marginBottom: 8,
-    marginTop: 12,
-  },
-  pickerContainer: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    marginBottom: 12,
-    backgroundColor: '#f9f9f9',
-  },
-  picker: {
-    height: 50,
-  },
-  textInput: {
-    height: 50,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    fontSize: 16,
-    backgroundColor: '#f9f9f9',
-    marginBottom: 16,
-  },
-  checkboxContainer: {
-    backgroundColor: 'transparent',
-    borderWidth: 0,
-    marginLeft: 0,
-    marginRight: 0,
-    padding: 0,
+    color: '#333',
     marginBottom: 8,
   },
-  checkboxText: {
-    fontWeight: 'normal',
+  input: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    padding: 15,
     fontSize: 16,
   },
-  checkboxRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 8,
+  forgotPassword: {
+    alignSelf: 'flex-end',
+    marginBottom: 24,
   },
-  locationInputContainer: {
-    flexDirection: 'row',
-    marginBottom: 16,
-  },
-  locationInput: {
-    flex: 1,
-    marginRight: 8,
-    marginBottom: 0,
-  },
-  locationButton: {
-    backgroundColor: '#3498db',
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  locationButtonText: {
-    color: '#fff',
-    fontWeight: '500',
+  forgotPasswordText: {
+    color: '#3498db',
     fontSize: 14,
   },
   button: {
     backgroundColor: '#3498db',
-    paddingVertical: 14,
     borderRadius: 8,
+    padding: 16,
     alignItems: 'center',
-    marginTop: 16,
+    marginBottom: 24,
   },
   buttonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
   },
-  navigationButtons: {
+  footer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
   },
-  backButton: {
-    backgroundColor: '#95a5a6',
-    flex: 0.48,
+  footerText: {
+    color: '#666',
+    fontSize: 14,
+  },
+  footerLink: {
+    color: '#3498db',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 5,
+  },
+  expoRouterLinks: {
+    marginTop: 20,
+    padding: 16,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+  },
+  linksHeader: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 10,
+  },
+  expoLink: {
+    color: '#3498db',
+    fontSize: 16,
+    marginBottom: 8,
   },
 });
 
-export default InitialSurveyScreen;
