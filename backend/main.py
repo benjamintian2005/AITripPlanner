@@ -63,11 +63,22 @@ def login():
 def user_survey():
     data = request.json
     username = data['username']
-    survey_data = data['survey_data']
-    
+    gender = data['gender']
+    age = data['age']
+    ethnicity = data['ethnicity']
+
+    table = dynamodb.Table('user-survey')
+    table.put_item(Item={'username': username, 'gender': gender, 'age': age, 'ethnicity': ethnicity})
     return jsonify({"status": "ok"})
 
+@app.route('/start-trip', methods=['POST'])
+def start_trip():
+    pass
 
+
+@app.route('/next-event', methods=['POST'])
+def next_event():
+    pass
     
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
