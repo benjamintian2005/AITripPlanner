@@ -12,24 +12,22 @@ app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
 # Initialize DynamoDB resource
-# IMPORTANT: Don't hardcode credentials in production code
-# Use environment variables or AWS IAM roles instead
 dynamodb = boto3.resource(
     'dynamodb',
-    # aws_access_key_id='YOUR_ACCESS_KEY',      # Use environment variables
-    # aws_secret_access_key='YOUR_SECRET_KEY',  # Use environment variables
+    aws_access_key_id= os.environ.get('AWS_ACCESS_KEY'),    #store as env variable
+    aws_secret_access_key= os.environ.get('AWS_SECRET'),    #store as env variable
     region_name='us-east-2'
 )
 
-# Tables
+
 users_table = dynamodb.Table('users')
-surveys_table = dynamodb.Table('user-survey')
+surveys_table = dynamodb.Table('user_survey')
 trips_table = dynamodb.Table('trips')
 events_table = dynamodb.Table('events')
 feedback_table = dynamodb.Table('feedback')
 
-# Claude API configuration - store your API key securely!
-CLAUDE_API_KEY = os.environ.get('CLAUDE_API_KEY', 'your_claude_api_key')  # Use environment variable
+
+CLAUDE_API_KEY = os.environ.get('CLAUDE_API_KEY')   #env variable
 CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
 CLAUDE_MODEL = "claude-3-7-sonnet-20250219"  # Use the latest model available
 
@@ -97,6 +95,7 @@ def login():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
 @app.route('/user-survey', methods=['POST'])
 def user_survey():
     try:
@@ -159,7 +158,8 @@ def generate_event_with_claude(user_profile, trip_details, current_location, moo
     """
     # Construct the prompt for Claude
     prompt = f"""
-    I need an event recommendation for a trip. Here's the context:
+    You are TripAdapt, a service that tailors activity recommendations based on the type of vacation, the people involved, the user's ratings of previous events, and the user's mood. 
+    Here is the user information:
 
     User Profile:
     - Gender: {user_profile.get('gender', 'Not specified')}
@@ -181,13 +181,8 @@ def generate_event_with_claude(user_profile, trip_details, current_location, moo
 
     Please provide ONE detailed event recommendation in the following format:
     - Name: [Event Name]
-    - Description: [Event Description, limited to 100 words]
+    - Description: [Event Description, limited to 50 words]
     - Location: [Event Location]
-    - Duration: [Expected Duration]
-    - Cost: [Estimated Cost per Person]
-    - Image: [Short description of an appropriate image]
-    
-    For the image description, just give a short description of what kind of image would represent this event well.
     """
     
     # Call Claude API
@@ -209,15 +204,6 @@ def generate_event_with_claude(user_profile, trip_details, current_location, moo
                 event['description'] = line.replace('- Description:', '').strip()
             elif line.startswith('- Location:'):
                 event['location'] = line.replace('- Location:', '').strip()
-            elif line.startswith('- Duration:'):
-                event['duration'] = line.replace('- Duration:', '').strip()
-            elif line.startswith('- Cost:'):
-                event['cost'] = line.replace('- Cost:', '').strip()
-            elif line.startswith('- Image:'):
-                image_desc = line.replace('- Image:', '').strip()
-                # Generate a placeholder image URL
-                event['image_url'] = f"https://example.com/images/placeholder.jpg"
-                event['image_description'] = image_desc
         
         return event
     
