@@ -11,6 +11,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Link , router} from 'expo-router';
 
 // Types
 interface Speaker {
@@ -29,7 +30,14 @@ interface EventScheduleItem {
   description?: string;
 }
 
+
 const EventPage: React.FC = () => {
+
+  const submitSurvey = () => {
+      
+        router.replace('/feedback')
+      
+    };
   // Mock data for the event
   const eventDetails = {
     title: "Tech Innovation Summit 2025",
@@ -178,6 +186,15 @@ const EventPage: React.FC = () => {
         <View style={styles.buttonContainer}>
           <TouchableOpacity style={styles.registerButton}>
             <Text style={styles.registerButtonText}>Register Now</Text>
+          </TouchableOpacity>
+        </View>
+        
+        {/* Next Event Button */}
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity style={styles.nextEventButton}
+            onPress={() => submitSurvey()}>
+            <Ionicons name="arrow-forward" size={20} color="white" style={styles.nextEventIcon} />
+            <Text style={styles.nextEventButtonText}>Next Event</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -354,6 +371,25 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
+  },
+  nextEventButton: {
+    backgroundColor: '#673AB7', // Purple color to differentiate from the register button
+    paddingVertical: 14,
+    paddingHorizontal: 30,
+    borderRadius: 25,
+    width: '100%',
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: -10, // Reduce space between buttons
+  },
+  nextEventButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  nextEventIcon: {
+    marginRight: 8,
   },
 });
 
