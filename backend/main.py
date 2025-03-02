@@ -1,21 +1,30 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, session
 from flask_cors import CORS
-from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime
+
 import boto3
 import uuid
-from datetime import datetime
 import requests
-import json
 import os
+
+
+from helper import print_exception, hash_password, verify_password
+
+if os.path.exists('.env'):
+    from dotenv import load_dotenv
+    load_dotenv()
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
+
+app.secret_key = os.environ.get('SESSION_SECRET_KEY')  # Configure secret key for session management
 
 # Initialize DynamoDB resource
 dynamodb = boto3.resource(
     'dynamodb',
     aws_access_key_id= os.environ.get('AWS_ACCESS_KEY'),    #store as env variable
     aws_secret_access_key= os.environ.get('AWS_SECRET'),    #store as env variable
+
     region_name='us-east-2'
 )
 
@@ -27,9 +36,12 @@ events_table = dynamodb.Table('events')
 feedback_table = dynamodb.Table('feedback')
 
 
+
 CLAUDE_API_KEY = os.environ.get('CLAUDE_API_KEY')   #env variable
+
 CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
 CLAUDE_MODEL = "claude-3-7-sonnet-20250219"  # Use the latest model available
+
 
 @app.route('/health', methods=['GET'])
 def get_health():
@@ -39,8 +51,8 @@ def get_health():
 def signup():
     try:
         data = request.json
-        username = data['username']
-        password = data['password']
+        username = data.get('username')
+        password = data.get('password')
         gender = data.get('gender')
         age = data.get('age')
         ethnicity = data.get('ethnicity')
@@ -51,27 +63,23 @@ def signup():
             return jsonify({"error": "User already exists"}), 400
         
         # Create user with hashed password
-        hashed_password = generate_password_hash(password)
+        hashed_password = hash_password(password)
         user_data = {
             'username': username, 
             'password': hashed_password,
-            'created_at': datetime.now().isoformat()
+            'created_at': datetime.now().isoformat(),
+            'gender': gender,
+            'age': age,
+            'ethnicity': ethnicity
         }
         
-        # Add optional profile data if provided
-        if gender:
-            user_data['gender'] = gender
-        if age:
-            user_data['age'] = age
-        if ethnicity:
-            user_data['ethnicity'] = ethnicity
-        
         users_table.put_item(Item=user_data)
-        
         return jsonify({"status": "ok", "message": "User created successfully"})
     
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print("Error logging in")
+        print_exception(e)
+        return jsonify({"error": "Internal server error"}), 500
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -79,6 +87,7 @@ def login():
         data = request.json
         username = data['username']
         password = data['password']
+        session['username'] = username
         
         # Get user from database
         response = users_table.get_item(Key={'username': username})
@@ -87,13 +96,16 @@ def login():
         
         # Verify password
         stored_password = response['Item']['password']
-        if not check_password_hash(stored_password, password):
+        if not verify_password(stored_password, password):
             return jsonify({"error": "Invalid password"}), 401
         
         return jsonify({"status": "ok", "message": "Logged in successfully"})
     
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print("Error logging in")
+        print_exception(e)
+        return jsonify({"error": "Internal server error"}), 500
+
 
 
 @app.route('/user-survey', methods=['POST'])
@@ -125,6 +137,7 @@ def user_survey():
     
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 def call_claude_api(prompt):
     """
